@@ -58,7 +58,7 @@ func callGoogleApi(urlString string, token string, pageToken string) ([]byte, er
 	return body, nil
 }
 
-func ListAllAlbums(token string) AlbumList {
+func listAllAlbums(token string) AlbumList {
 	getData := func(token string, nextToken string) AlbumList {
 		body, err := callGoogleApi(albumUrl, token, nextToken)
 		if err != nil {
@@ -76,6 +76,7 @@ func ListAllAlbums(token string) AlbumList {
 
 	data := getData(token, "")
 
+	//todo: figure out best way to handle pagination
 	if data.NextPageToken != "" {
 		data2 := getData(token, data.NextPageToken)
 		fmt.Println(data2)
@@ -97,7 +98,7 @@ type createAlbumnResponse struct {
 	IsWriteable bool
 }
 
-func CreateNewAlbum(token string) string {
+func createNewAlbum(token string) string {
 	data := &postData{Album: albumPost{Title: "test albumn"}}
 
 	payload, _ := json.Marshal(data)

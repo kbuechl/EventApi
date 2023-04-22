@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"eventapi/config"
-	"eventapi/internal/handlers"
+	"eventapi/internal/auth"
 	"eventapi/internal/middleware"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,6 +21,8 @@ func main() {
 		ErrorHandler: func(ctx *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			message := err.Error()
+
+			//todo: unwrap error futher?
 
 			var e *fiber.Error
 
@@ -48,15 +50,11 @@ func main() {
 	// todo: add csrf header
 	// https://docs.gofiber.io/api/middleware/csrf
 
-	ag.Get("/", handlers.HelloWorld)
-	ag.Get("/test", handlers.AnotherFunction)
-	ag.Get("/callback", handlers.Callback)
-	ag.Get("/login", handlers.Auth)
-	ag.Get("/logout", handlers.Logout)
-	ag.Get("/albums", handlers.GetAlbums)
-	ag.Post("/albums", handlers.CreateAlbum)
-
-	//todo: can we use context in handlers to pass them down to database calls
+	ag.Get("/callback", auth.Callback)
+	ag.Get("/login", auth.Login)
+	ag.Get("/logout", auth.Logout)
+	// ag.Get("/albums", handlers.GetAlbums)
+	// ag.Post("/albums", handlers.CreateAlbum)
 
 	app.Listen(":3000")
 }

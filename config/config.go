@@ -16,6 +16,7 @@ type OauthConfig struct {
 	Secret      string
 	Client      string
 	RedirectUrl string
+	State       string
 }
 
 type Server struct {
@@ -45,9 +46,10 @@ func New() *Config {
 			Host:     getEnv("POSTGRES_HOST", "localhost"),
 		},
 		Oauth: OauthConfig{
-			Secret:      getRequiredEnv("Secret"),
-			Client:      getRequiredEnv("Client"),
-			RedirectUrl: getEnv("redirect_url", ""),
+			Secret:      getRequiredEnv("OAUTH_SECRET"),
+			Client:      getRequiredEnv("OAUTH_CLIENT"),
+			RedirectUrl: getEnv("REDIRECT_URL", ""),
+			State:       getRequiredEnv("OAUTH_STATE"),
 		},
 		Server: Server{
 			SessionCookieName: "session",
