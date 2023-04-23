@@ -8,24 +8,25 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func UseSession(c *fiber.Ctx) error {
-	ss := session.NewSessionService()
-	sId := c.Cookies("session")
-	if sId != "" {
-		sessionData, err := ss.GetSession(c, sId)
-		if err == redis.Nil {
-			ss.ClearSession(c, sId)
-			return c.Redirect("/api/login", 303)
+func UseSession(s session.SessionManager) func(*fiber.Ctx) error {
+	return func(c *fiber.Ctx) error {
+		sId := c.Cookies("session")
+		if sId != "" {
+			sessionData, err := s.Get(c, sId)
+			if err == redis.Nil {
+				s.Clear(c, sId)
+				return c.Redirect("/api/login", 303)
+			}
+
+			if err != nil {
+				fmt.Println("Could not get session info")
+				return err
+			}
+
+			//not sure if this is going to work well, thinking i may just hold onto sessionId in context instead
+			c.Locals("session", sessionData)
 		}
 
-		if err != nil {
-			fmt.Println("Could not get session info")
-			return err
-		}
-
-		//not sure if this is going to work well, thinking i may just hold onto sessionId in context instead
-		c.Locals("session", sessionData)
+		return c.Next()
 	}
-
-	return c.Next()
 }

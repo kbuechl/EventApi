@@ -3,7 +3,8 @@ package auth
 import (
 	"context"
 	"encoding/json"
-	"eventapi/config"
+	"errors"
+	"eventapi/internal/configuration"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,36 +14,55 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-var configuration *config.Config
-var providerConfig *oauth2.Config
+type authConfig struct {
+	Secret      string
+	Client      string
+	RedirectUrl string
+	State       string
+}
 
-func init() {
-	configuration = config.New()
-	providerConfig = &oauth2.Config{
-		ClientID:     configuration.Oauth.Client,
-		ClientSecret: configuration.Oauth.Secret,
-		RedirectURL:  configuration.Oauth.RedirectUrl,
-		Scopes: []string{
-			//todo can we move to incremental scope requests?
-			"https://www.googleapis.com/auth/userinfo.email",
-			"https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata",
-			"https://www.googleapis.com/auth/photoslibrary.edit.appcreateddata",
-			"https://www.googleapis.com/auth/photoslibrary.appendonly"},
-		Endpoint: google.Endpoint,
+type AuthService struct {
+	config         *authConfig
+	providerConfig *oauth2.Config
+}
+
+type oAuthService interface {
+	getEntryPoint() string
+	exchange(c context.Context, state string, code string) (*oauth2.Token, error)
+}
+
+func NewAuthService() *AuthService {
+	c := configure()
+
+	return &AuthService{
+		config: c,
+		providerConfig: &oauth2.Config{
+			ClientID:     c.Client,
+			ClientSecret: c.Secret,
+			RedirectURL:  c.RedirectUrl,
+			Scopes: []string{
+				//todo can we move to incremental scope requests?
+				"https://www.googleapis.com/auth/userinfo.email",
+				"https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata",
+				"https://www.googleapis.com/auth/photoslibrary.edit.appcreateddata",
+				"https://www.googleapis.com/auth/photoslibrary.appendonly"},
+			Endpoint: google.Endpoint,
+		},
 	}
+
 }
 
 // get entry point for starting oauth flow
-func getEntryPoint() string {
-	return providerConfig.AuthCodeURL(configuration.Oauth.State)
+func (s *AuthService) getEntryPoint() string {
+	return s.providerConfig.AuthCodeURL(s.config.State)
 }
 
-func exchange(c context.Context, state string, code string) (*oauth2.Token, error) {
-	if state != configuration.Oauth.State {
-		panic("Oauth State did not match request")
+func (s *AuthService) exchange(c context.Context, state string, code string) (*oauth2.Token, error) {
+	if state != s.config.State {
+		return nil, errors.New("oauth State did not match request")
 	}
 
-	return providerConfig.Exchange(c, code)
+	return s.providerConfig.Exchange(c, code)
 }
 
 // Get user info from oauth provider with user token
@@ -81,4 +101,26 @@ func getUserInfo(t string) (*UserInfo, error) {
 	}
 
 	return &userInfo, nil
+}
+
+func configure() *authConfig {
+	secret, err := configuration.GetRequiredEnv("OAUTH_SECRET")
+	if err != nil {
+		panic(err)
+	}
+	c, err := configuration.GetRequiredEnv("OAUTH_CLIENT")
+	if err != nil {
+		panic(err)
+	}
+	state, err := configuration.GetRequiredEnv("OAUTH_STATE")
+	if err != nil {
+		panic(err)
+	}
+
+	return &authConfig{
+		Secret:      secret,
+		Client:      c,
+		RedirectUrl: configuration.GetEnv("REDIRECT_URL", "/"),
+		State:       state,
+	}
 }

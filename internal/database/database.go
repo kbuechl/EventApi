@@ -1,16 +1,21 @@
 package database
 
 import (
-	"eventapi/config"
+	"eventapi/internal/configuration"
 	"fmt"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-var instance *gorm.DB
+type DBConfig struct {
+	Database string
+	User     string
+	Password string
+	Host     string
+}
 
-func init() {
+func New() *gorm.DB {
 	dsn := getConnectionString()
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -18,19 +23,37 @@ func init() {
 		panic(err)
 	}
 
-	instance = db
+	return db
 }
+
 func getConnectionString() string {
-	config := config.New()
+	c := configure()
 
 	return fmt.Sprintf("host=%v user=%v password=%v dbname=%v port=%v sslmode=disable",
-		config.DB.Host,
-		config.DB.User,
-		config.DB.Password,
-		config.DB.Database,
+		c.Host,
+		c.User,
+		c.Password,
+		c.Database,
 		"5432")
 }
 
-func NewClient() *gorm.DB {
-	return instance
+func configure() *DBConfig {
+	u, err := configuration.GetRequiredEnv("POSTGRES_USER")
+
+	if err != nil {
+		panic(err)
+	}
+
+	p, err := configuration.GetRequiredEnv("POSTGRES_PASSWORD")
+
+	if err != nil {
+		panic(err)
+	}
+
+	return &DBConfig{
+		User:     u,
+		Password: p,
+		Database: configuration.GetEnv("POSTGRES_DB", "postgres"),
+		Host:     configuration.GetEnv("POSTGRES_HOST", "localhost"),
+	}
 }

@@ -6,8 +6,14 @@ import (
 	"gorm.io/gorm"
 )
 
-type UserService struct {
-	DB *gorm.DB
+type UserRepo struct {
+	db *gorm.DB
+}
+
+type UserRepository interface {
+	Create(u NewUser) (*User, error)
+	Exists(id string) bool
+	Migrate() error
 }
 
 type NewUser struct {
@@ -27,24 +33,22 @@ type User struct {
 	DeletedAt time.Time
 }
 
-func NewUserService() *UserService {
-	return &UserService{
-		DB: NewClient(),
+func NewUserRepo(db *gorm.DB) *UserRepo {
+	return &UserRepo{
+		db: db,
 	}
 }
 
-func init() {
-	//todo: can we run this as a separate script at controlled points?
-	db := NewClient()
-	db.AutoMigrate(&User{})
+func (s *UserRepo) Migrate() error {
+	return s.db.AutoMigrate(&User{})
 }
 
-func (s *UserService) Create(u NewUser) (*User, error) {
+func (s *UserRepo) Create(u NewUser) (*User, error) {
 	newUser := User{
 		NewUser: u,
 	}
 
-	result := s.DB.Create(&newUser)
+	result := s.db.Create(&newUser)
 
 	if result.Error != nil {
 		return nil, result.Error
@@ -53,9 +57,9 @@ func (s *UserService) Create(u NewUser) (*User, error) {
 	return &newUser, nil
 }
 
-func (s *UserService) Exists(id string) bool {
+func (s *UserRepo) Exists(id string) bool {
 	var user User
-	result := s.DB.First(&user, "id=?", id)
+	result := s.db.First(&user, "id=?", id)
 
 	return result.RowsAffected > 0
 }

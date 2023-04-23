@@ -1,21 +1,20 @@
 package session
 
 import (
-	"eventapi/config"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-func CreateSessionCookie(c *fiber.Ctx, sId string, expires time.Time) {
-	c.Cookie(buildCookie(config.New().Server.SessionCookieName,
+func createSessionCookie(c *fiber.Ctx, name string, sId string, expires time.Time) {
+	c.Cookie(buildCookie(name,
 		sId,
 		expires,
 	))
 }
 
-func ClearSessionCookie(c *fiber.Ctx) {
-	c.Cookie(buildCookie(config.New().Server.SessionCookieName,
+func clearSessionCookie(c *fiber.Ctx, name string) {
+	c.Cookie(buildCookie(name,
 		"",
 		time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 	))

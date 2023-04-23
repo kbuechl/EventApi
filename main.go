@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
-	"eventapi/config"
 	"eventapi/internal/auth"
+	"eventapi/internal/cache"
+	"eventapi/internal/database"
 	"eventapi/internal/middleware"
+	"eventapi/internal/session"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -41,7 +43,8 @@ func main() {
 	ag.Use(compress.New())
 
 	ag.Use(encryptcookie.New(encryptcookie.Config{
-		Key:    config.New().Server.CookieSecret,
+		//todo: find a way to move this to middleware / session service
+		Key:    "session",
 		Except: []string{"csrf_1"},
 	}))
 
@@ -50,9 +53,15 @@ func main() {
 	// todo: add csrf header
 	// https://docs.gofiber.io/api/middleware/csrf
 
-	ag.Get("/callback", auth.Callback)
-	ag.Get("/login", auth.Login)
-	ag.Get("/logout", auth.Logout)
+	db := database.New()
+	authService := auth.NewAuthService()
+	cacheService := cache.NewCacheService()
+	userRepo := database.NewUserRepo(db)
+	sessionService := session.NewSessionService(cacheService)
+
+	ag.Get("/callback", auth.Callback(authService, userRepo, sessionService))
+	ag.Get("/login", auth.Login(authService))
+	ag.Get("/logout", auth.Logout(sessionService))
 	// ag.Get("/albums", handlers.GetAlbums)
 	// ag.Post("/albums", handlers.CreateAlbum)
 
