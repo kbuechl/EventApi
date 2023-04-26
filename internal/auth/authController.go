@@ -28,11 +28,20 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 		if err != nil {
 			return err
 		}
+		rawIDToken, ok := token.Extra("id_token").(string)
+		if !ok {
+			return fmt.Errorf("error during callback: missing id_token")
+		}
 
-		ui, err := getUserInfo(token.AccessToken)
+		idToken, err := oa.verify(c.Context(), rawIDToken)
 
 		if err != nil {
-			return fmt.Errorf("could not fetch user info: %w", err)
+			return fmt.Errorf("error verifying user: %w", err)
+		}
+		var ui database.OidcUser
+
+		if err := idToken.Claims(&ui); err != nil {
+			return fmt.Errorf("error fetching standard claim: %w", err)
 		}
 
 		if _, e := u.Get(ui.Email); e != nil {
@@ -42,14 +51,7 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 			return fmt.Errorf("error retrieving user during callback: %w", e)
 		}
 
-		user, err := u.Update(ui.Email, &database.UpdateUser{
-			ID:           ui.ID,
-			FirstName:    ui.FirstName,
-			LastName:     ui.LastName,
-			Picture:      ui.Picture,
-			Verified:     ui.Verified,
-			RefreshToken: token.RefreshToken,
-		})
+		user, err := u.Update(ui.Email, ui, token.RefreshToken)
 
 		if err != nil {
 			return fmt.Errorf("error updating user: %w", err)

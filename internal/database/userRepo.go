@@ -3,7 +3,6 @@ package database
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -14,31 +13,27 @@ type UserRepo struct {
 
 type UserRepository interface {
 	Create(u User) (*User, error)
-	Update(email string, u *UpdateUser) (*User, error)
+	Update(email string, u OidcUser, refreshToken string) (*User, error)
 	Get(email string) (*User, error)
 	Migrate() error
 }
 
-type UpdateUser struct {
-	ID           string
-	FirstName    string
-	LastName     string
-	Picture      string
-	Verified     bool
-	RefreshToken string
+type OidcUser struct {
+	Email     string `json:"email"`
+	Verified  bool   `json:"verified_email"`
+	Picture   string `json:"picture"`
+	LastName  string `json:"family_name"`
+	FirstName string `json:"given_name"`
 }
 
 type User struct {
 	Email        string `gorm:"primaryKey"`
-	ID           string
 	FirstName    string
 	LastName     string
 	Picture      string
 	Verified     bool
 	RefreshToken string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    time.Time
+	gorm.Model
 }
 
 func NewUserRepo(db *gorm.DB) *UserRepo {
@@ -61,7 +56,7 @@ func (s *UserRepo) Create(u User) (*User, error) {
 	return &u, nil
 }
 
-func (s *UserRepo) Update(email string, u *UpdateUser) (*User, error) {
+func (s *UserRepo) Update(email string, u OidcUser, refreshToken string) (*User, error) {
 	user := &User{
 		Email: email,
 	}
@@ -74,9 +69,8 @@ func (s *UserRepo) Update(email string, u *UpdateUser) (*User, error) {
 		return nil, fmt.Errorf("error updating user: %w", result.Error)
 	}
 
-	user.ID = u.ID
 	user.Picture = u.Picture
-	user.RefreshToken = u.RefreshToken
+	user.RefreshToken = refreshToken
 	user.FirstName = u.FirstName
 	user.LastName = u.LastName
 	user.Verified = u.Verified
