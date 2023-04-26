@@ -15,7 +15,7 @@ type UserRepo struct {
 type UserRepository interface {
 	Create(u User) (*User, error)
 	Update(email string, u *UpdateUser) (*User, error)
-	Exists(email string) bool
+	Get(email string) (*User, error)
 	Migrate() error
 }
 
@@ -85,8 +85,8 @@ func (s *UserRepo) Update(email string, u *UpdateUser) (*User, error) {
 	return user, nil
 }
 
-func (s *UserRepo) Exists(email string) bool {
+func (s *UserRepo) Get(email string) (*User, error) {
 	var user User
 	result := s.db.First(&user, "email=?", email)
-	return result.RowsAffected > 0
+	return &user, result.Error
 }

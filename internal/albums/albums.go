@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 )
 
 const albumUrl = "https://photoslibrary.googleapis.com/v1/albums"
@@ -25,37 +24,24 @@ type AlbumData struct {
 	MediaItemsCount       string
 }
 
-func callGoogleApi(urlString string, token string, pageToken string) ([]byte, error) {
-	reqURL, err := url.Parse(urlString)
+func callGoogleApi(url string, token string, pageToken string) ([]byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
+
 	if err != nil {
-		return nil, err
-	}
-	if pageToken != "" {
-		values := reqURL.Query()
-
-		values.Add("pageToken", pageToken)
+		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	ptoken := fmt.Sprintf("Bearer %s", token)
-	res := &http.Request{
-		Method: "GET",
-		URL:    reqURL,
-		Header: map[string][]string{
-			"Authorization": {ptoken}},
-	}
+	req.Header = map[string][]string{
+		"Authorization": {fmt.Sprintf("Bearer %s", token)}}
 
-	req, err := http.DefaultClient.Do(res)
+	res, err := http.DefaultClient.Do(req)
+
 	if err != nil {
 		panic(err)
 
 	}
 	defer req.Body.Close()
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return body, nil
+	return io.ReadAll(res.Body)
 }
 
 func listAllAlbums(token string) AlbumList {

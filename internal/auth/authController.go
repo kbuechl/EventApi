@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"errors"
 	"eventapi/internal/database"
 	"eventapi/internal/session"
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 const userInfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"
@@ -33,8 +35,11 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 			return fmt.Errorf("could not fetch user info: %w", err)
 		}
 
-		if e := u.Exists(ui.Email); !e {
-			return c.SendStatus(403)
+		if _, e := u.Get(ui.Email); e != nil {
+			if errors.Is(e, gorm.ErrRecordNotFound) {
+				return c.SendStatus(403)
+			}
+			return fmt.Errorf("error retrieving user during callback: %w", e)
 		}
 
 		user, err := u.Update(ui.Email, &database.UpdateUser{
