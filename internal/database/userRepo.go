@@ -17,10 +17,10 @@ type UserRepository interface {
 }
 
 type NewUser struct {
-	ID           string `gorm:"primaryKey"`
+	Email        string `gorm:"primaryKey"`
+	ID           string
 	FirstName    string
 	LastName     string
-	Email        string
 	Picture      string
 	Verified     bool
 	RefreshToken string

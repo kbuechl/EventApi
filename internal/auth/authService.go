@@ -14,15 +14,8 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-type authConfig struct {
-	Secret      string
-	Client      string
-	RedirectUrl string
-	State       string
-}
-
 type AuthService struct {
-	config         *authConfig
+	cfg            *configuration.OauthConfig
 	providerConfig *oauth2.Config
 }
 
@@ -31,15 +24,17 @@ type oAuthService interface {
 	exchange(c context.Context, state string, code string) (*oauth2.Token, error)
 }
 
-func NewAuthService() *AuthService {
-	c := configure()
+func NewAuthService(cfg *configuration.OauthConfig) (*AuthService, error) {
+	if cfg.Client == "" || cfg.Secret == "" || cfg.State == "" {
+		return nil, fmt.Errorf("failed to initialize auth provider: missing critical config values")
+	}
 
 	return &AuthService{
-		config: c,
+		cfg: cfg,
 		providerConfig: &oauth2.Config{
-			ClientID:     c.Client,
-			ClientSecret: c.Secret,
-			RedirectURL:  c.RedirectUrl,
+			ClientID:     cfg.Client,
+			ClientSecret: cfg.Secret,
+			RedirectURL:  cfg.RedirectUrl,
 			Scopes: []string{
 				//todo can we move to incremental scope requests?
 				"https://www.googleapis.com/auth/userinfo.email",
@@ -48,17 +43,16 @@ func NewAuthService() *AuthService {
 				"https://www.googleapis.com/auth/photoslibrary.appendonly"},
 			Endpoint: google.Endpoint,
 		},
-	}
-
+	}, nil
 }
 
 // get entry point for starting oauth flow
 func (s *AuthService) getEntryPoint() string {
-	return s.providerConfig.AuthCodeURL(s.config.State)
+	return s.providerConfig.AuthCodeURL(s.cfg.State)
 }
 
 func (s *AuthService) exchange(c context.Context, state string, code string) (*oauth2.Token, error) {
-	if state != s.config.State {
+	if state != s.cfg.State {
 		return nil, errors.New("oauth State did not match request")
 	}
 
@@ -101,26 +95,4 @@ func getUserInfo(t string) (*UserInfo, error) {
 	}
 
 	return &userInfo, nil
-}
-
-func configure() *authConfig {
-	secret, err := configuration.GetRequiredEnv("OAUTH_SECRET")
-	if err != nil {
-		panic(err)
-	}
-	c, err := configuration.GetRequiredEnv("OAUTH_CLIENT")
-	if err != nil {
-		panic(err)
-	}
-	state, err := configuration.GetRequiredEnv("OAUTH_STATE")
-	if err != nil {
-		panic(err)
-	}
-
-	return &authConfig{
-		Secret:      secret,
-		Client:      c,
-		RedirectUrl: configuration.GetEnv("REDIRECT_URL", "/"),
-		State:       state,
-	}
 }

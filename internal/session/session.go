@@ -10,14 +10,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type config struct {
-	SessionCookieName string
-	CookieSecret      string
-}
-
 type SessionService struct {
 	cacheService *cache.CacheService
-	config       *config
+	cfg          *configuration.Server
 }
 
 type SessionManager interface {
@@ -30,11 +25,15 @@ func createSessionKey(sId string) string {
 	return fmt.Sprintf("session:%v", sId)
 }
 
-func NewSessionService(c *cache.CacheService) *SessionService {
-	return &SessionService{
-		config:       configure(),
-		cacheService: c,
+func NewSessionService(c *cache.CacheService, cfg *configuration.Server) (*SessionService, error) {
+	if cfg.CookieSecret == "" {
+		return nil, fmt.Errorf("failed to initialize session service: Cookie Secret not set")
 	}
+
+	return &SessionService{
+		cfg:          cfg,
+		cacheService: c,
+	}, nil
 }
 
 func (s *SessionService) Create(c *fiber.Ctx, sd SessionData) string {
@@ -42,12 +41,12 @@ func (s *SessionService) Create(c *fiber.Ctx, sd SessionData) string {
 	key := createSessionKey(sId)
 	s.cacheService.Set(c.Context(), key, sd, time.Until(sd.Expiry))
 	fmt.Println("expiry", sd.Expiry)
-	createSessionCookie(c, s.config.SessionCookieName, sId, sd.Expiry)
+	createSessionCookie(c, s.cfg.SessionCookieName, sId, sd.Expiry)
 	return sId
 }
 
 func (s *SessionService) Clear(c *fiber.Ctx, sId string) {
-	clearSessionCookie(c, s.config.SessionCookieName)
+	clearSessionCookie(c, s.cfg.SessionCookieName)
 	key := createSessionKey(sId)
 	s.cacheService.Del(c.Context(), key)
 }
@@ -62,15 +61,4 @@ func (s *SessionService) Get(c *fiber.Ctx, sId string) (*SessionData, error) {
 	sd.UnmarshalBinary([]byte(data))
 
 	return &sd, nil
-}
-
-func configure() *config {
-	cs, err := configuration.GetRequiredEnv("COOKIE_SECRET")
-	if err != nil {
-		panic(err)
-	}
-	return &config{
-		SessionCookieName: "session",
-		CookieSecret:      cs,
-	}
 }

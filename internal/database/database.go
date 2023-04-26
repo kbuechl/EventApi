@@ -8,52 +8,21 @@ import (
 	"gorm.io/gorm"
 )
 
-type DBConfig struct {
-	Database string
-	User     string
-	Password string
-	Host     string
-}
-
-func New() *gorm.DB {
-	dsn := getConnectionString()
+func New(cfg *configuration.DBConfig) (*gorm.DB, error) {
+	dsn := getConnectionString(cfg)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		println("Cannot connect to postgres")
-		panic(err)
+		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	return db
+	return db, nil
 }
 
-func getConnectionString() string {
-	c := configure()
-
+func getConnectionString(cfg *configuration.DBConfig) string {
 	return fmt.Sprintf("host=%v user=%v password=%v dbname=%v port=%v sslmode=disable",
-		c.Host,
-		c.User,
-		c.Password,
-		c.Database,
+		cfg.Host,
+		cfg.User,
+		cfg.Password,
+		cfg.Database,
 		"5432")
-}
-
-func configure() *DBConfig {
-	u, err := configuration.GetRequiredEnv("POSTGRES_USER")
-
-	if err != nil {
-		panic(err)
-	}
-
-	p, err := configuration.GetRequiredEnv("POSTGRES_PASSWORD")
-
-	if err != nil {
-		panic(err)
-	}
-
-	return &DBConfig{
-		User:     u,
-		Password: p,
-		Database: configuration.GetEnv("POSTGRES_DB", "postgres"),
-		Host:     configuration.GetEnv("POSTGRES_HOST", "localhost"),
-	}
 }

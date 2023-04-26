@@ -3,29 +3,21 @@ package cache
 import (
 	"context"
 	"eventapi/internal/configuration"
-	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-type config struct {
-	Address  string
-	Password string
-}
-
 type CacheService struct {
 	client *redis.Client
-	config *config
+	config *configuration.Cache
 }
 
-func NewCacheService() *CacheService {
-	c := configure()
-
+func NewCacheService(cfg *configuration.Cache) *CacheService {
 	return &CacheService{
-		config: c,
+		config: cfg,
 		client: redis.NewClient(&redis.Options{
-			Addr:     c.Address,
+			Addr:     cfg.Address,
 			Password: "",
 			DB:       0,
 		}),
@@ -42,11 +34,4 @@ func (s *CacheService) Set(c context.Context, key string, value any, ttl time.Du
 
 func (s *CacheService) Del(c context.Context, key string) {
 	s.client.Del(c, key)
-}
-
-func configure() *config {
-	return &config{
-		Address:  fmt.Sprintf("%v:6379", configuration.GetEnv("REDIS_HOST", "redis")),
-		Password: configuration.GetEnv("REDIS_PASSWORD", ""),
-	}
 }
