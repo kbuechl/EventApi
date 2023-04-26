@@ -9,6 +9,7 @@ import (
 	"eventapi/internal/middleware"
 	"eventapi/internal/session"
 	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -42,6 +43,13 @@ func main() {
 	sessionService, err := session.NewSessionService(cacheService, &config.Server)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if m := os.Getenv("MIGRATE_ENABLED"); m == "true" {
+		mErr := userRepo.Migrate()
+		if mErr != nil {
+			log.Fatal(err)
+		}
 	}
 
 	//todo: recover from panics

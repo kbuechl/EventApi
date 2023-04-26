@@ -16,7 +16,7 @@ type SessionService struct {
 }
 
 type SessionManager interface {
-	Create(c *fiber.Ctx, sd SessionData) string
+	Create(c *fiber.Ctx, expiry time.Time, sd SessionData) (string, error)
 	Clear(c *fiber.Ctx, sId string)
 	Get(c *fiber.Ctx, sId string) (*SessionData, error)
 }
@@ -36,13 +36,15 @@ func NewSessionService(c *cache.CacheService, cfg *configuration.Server) (*Sessi
 	}, nil
 }
 
-func (s *SessionService) Create(c *fiber.Ctx, sd SessionData) string {
+func (s *SessionService) Create(c *fiber.Ctx, expiry time.Time, sd SessionData) (string, error) {
 	sId := uuid.New().String()
 	key := createSessionKey(sId)
-	s.cacheService.Set(c.Context(), key, sd, time.Until(sd.Expiry))
-	fmt.Println("expiry", sd.Expiry)
-	createSessionCookie(c, s.cfg.SessionCookieName, sId, sd.Expiry)
-	return sId
+	err := s.cacheService.Set(c.Context(), key, sd, time.Until(expiry))
+	if err != nil {
+		return "", fmt.Errorf("error setting user session in cache: %w", err)
+	}
+	createSessionCookie(c, s.cfg.SessionCookieName, sId, expiry)
+	return sId, nil
 }
 
 func (s *SessionService) Clear(c *fiber.Ctx, sId string) {

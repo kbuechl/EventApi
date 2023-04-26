@@ -1,6 +1,8 @@
 package database
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -11,13 +13,13 @@ type UserRepo struct {
 }
 
 type UserRepository interface {
-	Create(u NewUser) (*User, error)
-	Exists(id string) bool
+	Create(u User) (*User, error)
+	Update(email string, u *UpdateUser) (*User, error)
+	Exists(email string) bool
 	Migrate() error
 }
 
-type NewUser struct {
-	Email        string `gorm:"primaryKey"`
+type UpdateUser struct {
 	ID           string
 	FirstName    string
 	LastName     string
@@ -27,10 +29,16 @@ type NewUser struct {
 }
 
 type User struct {
-	NewUser
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt time.Time
+	Email        string `gorm:"primaryKey"`
+	ID           string
+	FirstName    string
+	LastName     string
+	Picture      string
+	Verified     bool
+	RefreshToken string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	DeletedAt    time.Time
 }
 
 func NewUserRepo(db *gorm.DB) *UserRepo {
@@ -43,23 +51,42 @@ func (s *UserRepo) Migrate() error {
 	return s.db.AutoMigrate(&User{})
 }
 
-func (s *UserRepo) Create(u NewUser) (*User, error) {
-	newUser := User{
-		NewUser: u,
-	}
-
-	result := s.db.Create(&newUser)
+func (s *UserRepo) Create(u User) (*User, error) {
+	result := s.db.Create(&u)
 
 	if result.Error != nil {
-		return nil, result.Error
+		return nil, fmt.Errorf("error creating user: %w", result.Error)
 	}
 
-	return &newUser, nil
+	return &u, nil
 }
 
-func (s *UserRepo) Exists(id string) bool {
-	var user User
-	result := s.db.First(&user, "id=?", id)
+func (s *UserRepo) Update(email string, u *UpdateUser) (*User, error) {
+	user := &User{
+		Email: email,
+	}
+	result := s.db.First(user)
 
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("error updating user: user does not exist")
+		}
+		return nil, fmt.Errorf("error updating user: %w", result.Error)
+	}
+
+	user.ID = u.ID
+	user.Picture = u.Picture
+	user.RefreshToken = u.RefreshToken
+	user.FirstName = u.FirstName
+	user.LastName = u.LastName
+	user.Verified = u.Verified
+
+	s.db.Save(user)
+	return user, nil
+}
+
+func (s *UserRepo) Exists(email string) bool {
+	var user User
+	result := s.db.First(&user, "email=?", email)
 	return result.RowsAffected > 0
 }

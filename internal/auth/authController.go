@@ -20,7 +20,7 @@ func Login(a *AuthService) func(c *fiber.Ctx) error {
 }
 
 // oauth callback
-func Callback(oa oAuthService, u database.UserRepository, s *session.SessionService) func(c *fiber.Ctx) error {
+func Callback(oa oAuthService, u database.UserRepository, s session.SessionManager) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		token, err := oa.exchange(c.Context(), c.FormValue("state"), c.FormValue("code"))
 		if err != nil {
@@ -33,29 +33,33 @@ func Callback(oa oAuthService, u database.UserRepository, s *session.SessionServ
 			return fmt.Errorf("could not fetch user info: %w", err)
 		}
 
-		if exists := u.Exists(ui.ID); !exists {
-			println("User does not exist, creating")
-
-			_, err := u.Create(database.NewUser{
-				ID:           ui.ID,
-				FirstName:    ui.FirstName,
-				LastName:     ui.LastName,
-				Email:        ui.Email,
-				Picture:      ui.Picture,
-				Verified:     ui.Verified,
-				RefreshToken: token.RefreshToken,
-			})
-
-			if err != nil {
-				return fmt.Errorf("error creating user: %w", err)
-			}
+		if e := u.Exists(ui.Email); !e {
+			return c.SendStatus(403)
 		}
 
-		s.Create(c, session.SessionData{
-			AccessToken:  token.AccessToken,
+		user, err := u.Update(ui.Email, &database.UpdateUser{
+			ID:           ui.ID,
+			FirstName:    ui.FirstName,
+			LastName:     ui.LastName,
+			Picture:      ui.Picture,
+			Verified:     ui.Verified,
 			RefreshToken: token.RefreshToken,
-			Expiry:       token.Expiry,
 		})
+
+		if err != nil {
+			return fmt.Errorf("error updating user: %w", err)
+		}
+
+		_, cErr := s.Create(c, token.Expiry, session.SessionData{
+			Email:       user.Email,
+			AccessToken: token.AccessToken,
+		})
+
+		if cErr != nil {
+			//todo: add logger call
+			println(cErr.Error())
+			return c.SendStatus(500)
+		}
 
 		return c.Redirect("/")
 	}
