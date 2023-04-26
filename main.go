@@ -51,8 +51,6 @@ func main() {
 			code := fiber.StatusInternalServerError
 			message := err.Error()
 
-			//todo: unwrap error futher?
-
 			var e *fiber.Error
 
 			if errors.As(err, &e) {
