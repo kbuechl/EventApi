@@ -5,8 +5,11 @@ import (
 	"eventapi/internal/database"
 	"eventapi/internal/session"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -15,7 +18,22 @@ const userInfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"
 // Login handler
 func Login(a *AuthService) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		url := a.getEntryPoint()
+
+		nonce, err := randString(16)
+
+		if err != nil {
+			return fmt.Errorf("error generating nonce value: %w", err)
+		}
+
+		c.Cookie(&fiber.Cookie{
+			Name:     "nonce",
+			Value:    nonce,
+			HTTPOnly: true,
+			Secure:   c.Context().IsTLS(),
+			MaxAge:   int(time.Hour.Seconds()),
+		})
+
+		url := a.getEntryPoint(nonce)
 		return c.Redirect(url)
 	}
 
@@ -28,25 +46,35 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 		if err != nil {
 			return err
 		}
-		rawIDToken, ok := token.Extra("id_token").(string)
+
+		rawIdToken, ok := token.Extra("id_token").(string)
+
 		if !ok {
-			return fmt.Errorf("error during callback: missing id_token")
+			return errors.New("error getting id_token from request")
 		}
 
-		idToken, err := oa.verify(c.Context(), rawIDToken)
+		idToken, err := oa.verify(c.Context(), rawIdToken)
+
+		nonce := c.Cookies("nonce")
+
+		log.Debug().Msgf("nonce: %v", idToken.Nonce)
+		if nonce == "" || nonce != idToken.Nonce {
+			log.Warn().Msg("nonce value did not match supplied")
+			return c.SendStatus(http.StatusForbidden)
+		}
+		if err != nil {
+			return c.SendStatus(http.StatusForbidden)
+		}
+
+		ui, err := oa.getUserInfo(c.Context(), token)
 
 		if err != nil {
-			return fmt.Errorf("error verifying user: %w", err)
-		}
-		var ui database.OidcUser
-
-		if err := idToken.Claims(&ui); err != nil {
-			return fmt.Errorf("error fetching standard claim: %w", err)
+			return fmt.Errorf("could not get user info: %w", err)
 		}
 
 		if _, e := u.Get(ui.Email); e != nil {
 			if errors.Is(e, gorm.ErrRecordNotFound) {
-				return c.SendStatus(403)
+				return c.SendStatus(http.StatusForbidden)
 			}
 			return fmt.Errorf("error retrieving user during callback: %w", e)
 		}
@@ -57,14 +85,13 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 			return fmt.Errorf("error updating user: %w", err)
 		}
 
-		_, cErr := s.Create(c, token.Expiry, session.SessionData{
+		_, err = s.Create(c, token.Expiry, session.SessionData{
 			Email:       user.Email,
 			AccessToken: token.AccessToken,
 		})
 
-		if cErr != nil {
-			//todo: add logger call
-			println(cErr.Error())
+		if err != nil {
+			log.Error().Err(err).Msg("error creating user session")
 			return c.SendStatus(500)
 		}
 

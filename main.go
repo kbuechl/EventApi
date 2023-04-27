@@ -8,12 +8,12 @@ import (
 	"eventapi/internal/database"
 	"eventapi/internal/middleware"
 	"eventapi/internal/session"
-	"log"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/encryptcookie"
+	"github.com/rs/zerolog/log"
 )
 
 type ErrorMessage struct {
@@ -25,30 +25,30 @@ func main() {
 
 	db, err := database.New(&config.DB)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err)
 	}
 
 	authService, err := auth.NewAuthService(&config.Oauth)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err)
 	}
 
 	cacheService := cache.NewCacheService(&config.Cache)
 
 	userRepo := database.NewUserRepo(db)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err)
 	}
 
 	sessionService, err := session.NewSessionService(cacheService, &config.Server)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err)
 	}
 
 	if m := os.Getenv("MIGRATE_ENABLED"); m == "true" {
 		mErr := userRepo.Migrate()
 		if mErr != nil {
-			log.Fatal(err)
+			log.Fatal().Err(err)
 		}
 	}
 
@@ -65,6 +65,7 @@ func main() {
 				code = e.Code
 			}
 
+			log.Error().Err(err).Msg("unhandled exception in main")
 			return ctx.Status(code).JSON(ErrorMessage{Message: message})
 		},
 	})

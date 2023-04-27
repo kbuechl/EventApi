@@ -2,9 +2,13 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"eventapi/internal/configuration"
+	"eventapi/internal/database"
 	"fmt"
+	"io"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -20,9 +24,10 @@ type AuthService struct {
 }
 
 type oAuthService interface {
-	getEntryPoint() string
+	getEntryPoint(nonce string) string
 	exchange(c context.Context, state string, code string) (*oauth2.Token, error)
 	verify(c context.Context, token string) (*oidc.IDToken, error)
+	getUserInfo(c context.Context, token *oauth2.Token) (*database.OidcUser, error)
 }
 
 func NewAuthService(cfg *configuration.OauthConfig) (*AuthService, error) {
@@ -56,8 +61,8 @@ func NewAuthService(cfg *configuration.OauthConfig) (*AuthService, error) {
 }
 
 // get entry point for starting oauth flow
-func (s *AuthService) getEntryPoint() string {
-	return s.providerConfig.AuthCodeURL(s.cfg.State)
+func (s *AuthService) getEntryPoint(nonce string) string {
+	return s.providerConfig.AuthCodeURL(s.cfg.State, oidc.Nonce(nonce))
 }
 
 func (s *AuthService) exchange(c context.Context, state string, code string) (*oauth2.Token, error) {
@@ -65,9 +70,31 @@ func (s *AuthService) exchange(c context.Context, state string, code string) (*o
 		return nil, errors.New("oauth State did not match request")
 	}
 
-	return s.providerConfig.Exchange(c, code)
+	return s.providerConfig.Exchange(c, code, oauth2.AccessTypeOffline)
 }
 func (s *AuthService) verify(c context.Context, token string) (*oidc.IDToken, error) {
 	verifier := s.provider.Verifier(&oidc.Config{ClientID: s.cfg.Client})
 	return verifier.Verify(c, token)
+}
+func (s *AuthService) getUserInfo(c context.Context, token *oauth2.Token) (*database.OidcUser, error) {
+	u, err := s.provider.UserInfo(c, oauth2.StaticTokenSource(token))
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting user info: %w", err)
+	}
+	var userInfo = &database.OidcUser{}
+
+	if err := u.Claims(userInfo); err != nil {
+		return nil, fmt.Errorf("error getting user claim: %w", err)
+	}
+
+	return userInfo, nil
+}
+
+func randString(nByte int) (string, error) {
+	b := make([]byte, nByte)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
