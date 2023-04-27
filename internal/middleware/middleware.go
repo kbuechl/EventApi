@@ -19,8 +19,7 @@ func UseSession(s session.SessionManager) func(*fiber.Ctx) error {
 			}
 
 			if err != nil {
-				fmt.Println("Could not get session info")
-				return err
+				return fmt.Errorf("error getting user session in middleware: %w", err)
 			}
 
 			//not sure if this is going to work well, thinking i may just hold onto sessionId in context instead
