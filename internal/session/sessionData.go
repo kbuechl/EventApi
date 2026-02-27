@@ -12,9 +12,8 @@ type SessionData struct {
 func (sd SessionData) MarshalBinary() ([]byte, error) {
 	return json.Marshal(sd)
 }
-func (sd SessionData) UnmarshalBinary(data []byte) error {
-	if err := json.Unmarshal(data, &sd); err != nil {
-		return err
-	}
-	return nil
+
+// UnmarshalBinary uses a pointer receiver so the unmarshaled data is actually stored.
+func (sd *SessionData) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, sd)
 }

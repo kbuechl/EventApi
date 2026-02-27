@@ -28,21 +28,19 @@ type OidcUser struct {
 }
 
 type User struct {
-	Email        string `gorm:"primaryKey"`
-	FirstName    string
-	LastName     string
-	Picture      string
-	Verified     bool
-	RefreshToken string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	DeletedAt    time.Time
+	Email        string    `gorm:"primaryKey"   json:"email"`
+	FirstName    string    `json:"firstName"`
+	LastName     string    `json:"lastName"`
+	Picture      string    `json:"picture"`
+	Verified     bool      `json:"verified"`
+	RefreshToken string    `json:"-"` // never expose in API responses
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+	DeletedAt    time.Time `json:"-"`
 }
 
 func NewUserRepo(db *gorm.DB) *UserRepo {
-	return &UserRepo{
-		db: db,
-	}
+	return &UserRepo{db: db}
 }
 
 func (s *UserRepo) Migrate() error {
@@ -51,20 +49,15 @@ func (s *UserRepo) Migrate() error {
 
 func (s *UserRepo) Create(u User) (*User, error) {
 	result := s.db.Create(&u)
-
 	if result.Error != nil {
 		return nil, fmt.Errorf("error creating user: %w", result.Error)
 	}
-
 	return &u, nil
 }
 
 func (s *UserRepo) Update(email string, u *OidcUser, refreshToken string) (*User, error) {
-	user := &User{
-		Email: email,
-	}
+	user := &User{Email: email}
 	result := s.db.First(user)
-
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("error updating user: user does not exist")
@@ -73,12 +66,10 @@ func (s *UserRepo) Update(email string, u *OidcUser, refreshToken string) (*User
 	}
 
 	user.Picture = u.Picture
-
-	//only sent on first auth
+	// RefreshToken is only sent on the first auth
 	if refreshToken != "" {
 		user.RefreshToken = refreshToken
 	}
-
 	user.FirstName = u.FirstName
 	user.LastName = u.LastName
 	user.Verified = u.Verified
@@ -89,6 +80,6 @@ func (s *UserRepo) Update(email string, u *OidcUser, refreshToken string) (*User
 
 func (s *UserRepo) Get(email string) (*User, error) {
 	var user User
-	result := s.db.First(&user, "email=?", email)
+	result := s.db.First(&user, "email = ?", email)
 	return &user, result.Error
 }

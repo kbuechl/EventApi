@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"eventapi/internal/database"
+	"eventapi/internal/middleware"
 	"eventapi/internal/session"
 	"fmt"
 	"net/http"
@@ -15,12 +16,10 @@ import (
 
 const userInfoURL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
-// Login handler
+// Login redirects the user to Google's OAuth consent screen.
 func Login(a *AuthService) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-
 		nonce, err := randString(16)
-
 		if err != nil {
 			return fmt.Errorf("error generating nonce value: %w", err)
 		}
@@ -36,10 +35,9 @@ func Login(a *AuthService) func(c *fiber.Ctx) error {
 		url := a.getEntryPoint(nonce)
 		return c.Redirect(url)
 	}
-
 }
 
-// oauth callback
+// Callback handles the OAuth2 redirect from Google.
 func Callback(oa oAuthService, u database.UserRepository, s session.SessionManager) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		token, err := oa.exchange(c.Context(), c.FormValue("state"), c.FormValue("code"))
@@ -48,7 +46,6 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 		}
 
 		rawIdToken, ok := token.Extra("id_token").(string)
-
 		if !ok {
 			return errors.New("error getting id_token from request")
 		}
@@ -56,7 +53,6 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 		idToken, err := oa.verify(c.Context(), rawIdToken)
 
 		nonce := c.Cookies("nonce")
-
 		log.Debug().Msgf("nonce: %v", idToken.Nonce)
 		if nonce == "" || nonce != idToken.Nonce {
 			log.Warn().Msg("nonce value did not match supplied")
@@ -67,7 +63,6 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 		}
 
 		ui, err := oa.getUserInfo(c.Context(), token)
-
 		if err != nil {
 			return fmt.Errorf("could not get user info: %w", err)
 		}
@@ -80,7 +75,6 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 		}
 
 		user, err := u.Update(ui.Email, ui, token.RefreshToken)
-
 		if err != nil {
 			return fmt.Errorf("error updating user: %w", err)
 		}
@@ -89,7 +83,6 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 			Email:       user.Email,
 			AccessToken: token.AccessToken,
 		})
-
 		if err != nil {
 			log.Error().Err(err).Msg("error creating user session")
 			return c.SendStatus(500)
@@ -97,14 +90,32 @@ func Callback(oa oAuthService, u database.UserRepository, s session.SessionManag
 
 		return c.Redirect("/")
 	}
-
 }
 
+// Logout clears the session and redirects home.
 func Logout(s *session.SessionService) func(*fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		if sId := c.Cookies("session"); sId != "" {
 			s.Clear(c, sId)
 		}
 		return c.Redirect("/", 303)
+	}
+}
+
+// Me returns the current authenticated user's profile.
+func Me(u database.UserRepository) func(*fiber.Ctx) error {
+	return func(c *fiber.Ctx) error {
+		sd := middleware.GetSession(c)
+		if sd == nil {
+			return c.SendStatus(fiber.StatusUnauthorized)
+		}
+		user, err := u.Get(sd.Email)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return c.SendStatus(fiber.StatusForbidden)
+			}
+			return fmt.Errorf("error fetching user: %w", err)
+		}
+		return c.JSON(user)
 	}
 }
